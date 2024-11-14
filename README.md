@@ -2,14 +2,11 @@
 
 Using StreamSets Subscriptions & Pipelines for monitoring
 
-- [Custom Notifications Management](Custom_Notifications_Management) - Custom management of subscriptions-based notifications
-- [Automated Error Acknowledgement](Inactive_Error_State_ACK) - Automating acknowledgement of jobs in INACTIVE_ERROR state
-
-# Custom management of subscriptions-based notifications
+## Use-Case #1: Job Monitoring
 
 This is a more comprehensive example covering a design pattern developed by [Mark Brooks](https://github.com/onefoursix) for customizing the management of subscriptions-based notifications
 
-### Example Use Case
+### Problem statement:
 
 Consider a running pipeline that is successfully writing to Kafka and then, for some reason, the Kafka cluster becomes unreachable.  
 Assume the pipeline is configured to retry infinitely and that a Control Hub Subscription is configured to push outbound webhooks to a Slack Channel for the [Job Status Change Event](https://docs.streamsets.com/portal/#controlhub/latest/help/controlhub/UserGuide/Subscriptions/Events.html#concept_gjm_d5t_mfb).
@@ -19,7 +16,9 @@ As the retry logic of the pipeline executes, one might receive a frequent and st
 
 Once the original notification with the Kafka timeout error message has been received, admins may wish to suppress the steady stream of similar notifications for a period of time, for example for every 15 or 30 minutes, until the issue is resolved, rather than getting multiple notifications every five minutes.
 
-### Using SDC and Kafka to Manage Control Hub Notifications
+### Solution overview: 
+#### Using StreamSets microservice pipeline and Kafka to manage notifications
+
 One way to allow admins to configure custom Control Hub notification handling is to use a pair of SDC pipelines as depicted below:
 
 <img src="/images/custom_notifications_2.png" align="center" />
@@ -149,14 +148,13 @@ One can validate the correct behavior by correlating timestamps in the notificat
 If the pattern described above is implemented, the result will be two Jobs that manage how Control Hub notifications get routed to target systems.  
 To ensure that any issues in these two Jobs are always known right away (and are never suppressed), create a dedicated Subscription that monitors the Job status of just these two Jobs and that sends notifications directly to the Admin team.
 
-# Automating acknowledgement of jobs in INACTIVE_ERROR state
+## Use-Case #2: Automated acknowledgement of jobs going in INACTIVE_ERROR state
 
-
-### Problem statement
+### Problem statement:
 
  Jobs going into INACTIVE_ERROR state and missing next scheduled runs unless the error is acknowledged by an operator.
 
-### Solution overview
+### Solution overview:
 
 The example below demonstrates using subscriptions and a REST service(StreamSets pipeline) to automate acknowledgement of jobs in INACTIVE_ERROR state. For this we’ll create:
 
