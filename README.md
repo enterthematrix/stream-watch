@@ -13,17 +13,21 @@ Assume the pipeline is configured to retry infinitely and that a Control Hub Sub
 As the retry logic of the pipeline executes, one might receive a frequent and steady stream of notifications, like this:
 
 <img src="/images/custom_notifications_1.png" align="center" />
+<img src="/images/kafka_error.png" align="center" />
 
-Once the original notification with the Kafka timeout error message has been received, admins may wish to suppress the steady stream of similar notifications for a period of time, for example for every 15 or 30 minutes, until the issue is resolved, rather than getting multiple notifications every five minutes.
+Once the original notification with the KAFKA_68 error code has been received, operations may wish to suppress the steady stream of similar notifications for a period of time, for example for every 15 or 30 minutes, until the issue is resolved, rather than getting multiple notifications every five minutes.
 
 ### Solution overview: 
 #### Using StreamSets microservice pipeline and Kafka to manage notifications
 
-One way to allow admins to configure custom Control Hub notification handling is to use a pair of SDC pipelines as depicted below:
+One way to allow operations to configure custom Control Hub notification handling is to use a pair of SDC pipelines as depicted below:
+
 
 <img src="/images/custom_notifications_2.png" align="center" />
 
-The HTTP to Kafka pipeline instances are SDC Microservice Pipelines (behind a Load Balancer for HA) configured as the target for Control Hub's outbound Webhook notifications.  The pipeline instances publish all notifications to a Kafka topic, analogous to a [Kafka REST-Proxy](https://github.com/confluentinc/kafka-rest).
+
+The 'REST Service' to Kafka pipeline instances are SDC Microservice Pipelines (behind a Load Balancer for HA) configured as the target for Control Hub's outbound Webhook notifications.  
+The pipeline instances publish all notifications to a Kafka topic
 
 The second pipeline consumes notifications from the Kafka topic and performs any desired aggregation, enrichment, and filtering before forwarding notifications to one or more targets such as Slack, PagerDuty, Microsoft Teams, Email, etc...
 
@@ -37,7 +41,7 @@ The second pipeline consumes notifications from the Kafka topic and performs any
 
 4. A retention period can be set for all received notifications using Kafka's message retention property.
 
-5. Fine grained logic can be applied to different subsets of pipeline notifications.  For example, notifications for mission-critical pipelines might never be suppressed, but notifications for ad-hoc pipelines could be.
+5. Fine-grained logic can be applied to different subsets of pipeline notifications.  For example, notifications for mission-critical pipelines might never be suppressed, but notifications for ad-hoc pipelines could be.
 
 6. A single Control Hub Subscription can be used to send notifications to multiple targets simultaneously, including multiple Webhooks and email.
 
@@ -46,7 +50,7 @@ The second pipeline consumes notifications from the Kafka topic and performs any
 ### Control Hub Subscription
 A Control Hub Subscription that listens for Job Status Change events and forwards them as outbound Webhooks to the first pipeline, with just the parameter values of the change,  might be configured like this:
 
-<img src="/images/custom_notifications_3.png" align="center" />
+<img src="/images/job_state_change_subscription.png" align="center" />
 
 The Payload for the outbound Webhook is:
 
@@ -70,31 +74,42 @@ Note the top level elements **notification_type** and **notification_payload** a
 ### Pipeline 1: Control Hub Notifications to Kafka
 The first pipeline is an [SDC Microservice pipeline](https://docs.streamsets.com/portal/#datacollector/latest/help/datacollector/UserGuide/Microservice/Microservice_Title.html#concept_gzw_tdm_p2b) that looks like this:
 
-<img src="/images/custom_notifications_4.png" align="center" />
+<img src="/images/StreamSets_Monitoring_REST_Service_1.png" align="center" />
 
-The REST Service Origin is configured to listen on port 18888 and requires clients (including the Control Hub Webhook) to set the HTTP header *X-SDC-APPLICATION-ID* with the value *12345*:
-
-<img src="/images/custom_notifications_5.png" align="center" />
+The REST Service Origin is configured to listen on port 18888 and requires clients (including the Control Hub Webhook) to set the HTTP header *X-SDC-APPLICATION-ID* with the value *StreamWatch*:
 
 Here is a sample notification received by the REST Service Origin:
 
-<img src="/images/custom_notifications_6.png" align="center" />
+<img src="/images/StreamSets_Monitoring_REST_Service_2.png" align="center" />
 
 This pipeline should be deployed using a Job with [at least 2 instances](https://docs.streamsets.com/portal/#controlhub/latest/help/controlhub/UserGuide/Jobs/Jobs-PipelineInstances.html#concept_abz_mkl_rz), behind a Load Balancer, for HA purposes.
 
 ### Pipeline 2: Control Hub Notification Handler
 The second pipeline could look like this
 
-<img src="/images/custom_notifications_7.png" align="center" />
+<img src="/images/StreamSets_Notification_Processor.png" align="center" />
 
-This pipeline consumes messages from the Kafka topic and routes them to notification-type specific handlers.  
-For example, Pipeline Commit events could be forwarded unchanged to Jenkins to kick-off CI/CD processes, and Job Status Change events could be filtered to suppress dupes within a 15 minute window and then forwarded to both Slack and Email.  
+This pipeline consumes subscription messages from the Kafka topic and routes them to notification-type specific handlers.  
+For example, Pipeline Commit events could be forwarded unchanged to Jenkins to kick-off CI/CD processes, and Job Status Change events could be filtered to suppress duplicate messages within a 15 minute window and then forwarded to both Slack/Teams etc.  
 Suppressed Job Status Changed events can be written to an Audit Log.
+
+#### 3. [Optional] To configure NGINX/HAProxy load balancer, we can use the Docker commands like below:
+````
+NGINX:
+docker run --name <name> --network=<docker-cluster>  -v /<host-path>/nginx.conf:/etc/nginx/nginx.conf:ro -d -p <custom-port>:80 nginx
+example: docker run --name my-nginx --network=cluster  -v ~/nginx/nginx.conf:/etc/nginx/nginx.conf:ro -d -p 8081:80 nginx
+
+HAProxy:
+docker run --name <name> --network=<docker-cluster> --restart on-failure -v /<host-path>:/usr/local/etc/haproxy/haproxy.cfg  -d -p <custom-port>:80 -p 8404:8404 haproxy
+example: docker run --name my-haproxy --network=cluster --restart on-failure -v /home/ubuntu/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg  -d -p 8081:80 -p 8404:8404 haproxy
+````
+** Sample NGINX configuration is available [here](config/nginx.conf)
+** Sample HAProxy configuration is available [here](config/haproxy.cfg)  
 
 ### Routing notifications to notification-type handlers
 The Notification Type Router routes messages based on the top level **notification-type** field from the original Webhook payload:
 
-<img src="/images/custom_notifications_8.png" align="center" />
+<img src="/images/notification-type.png" align="center" />
 
 ### Job Status Change Notification Handler
 
@@ -102,9 +117,7 @@ Here is an example Jython Job Status Change Notification Handler implementation 
 
 The pipeline takes two input parameters: a number of minutes within which to suppress duplicate notifications, and a directory for the suppressed notifications log:
 
-<img src="/images/custom_notifications_9.png" align="center" />
-
-The main Jython script for the Job Status Change Notification Handler is posted [here](https://gist.github.com/onefoursix/3a5777502085bf32c3ed61a2e85d5ea3#file-custom_control_hub_notification_handler-jy).
+<img src="/images/Handle_Job_Status_Change_1.png" align="center" />
 
 The Job Status Change Notification Handler implements this logic:
 ````
@@ -122,27 +135,17 @@ The Job Status Change Notification Handler implements this logic:
 
  - Each notification record will have a record attribute named send_notification set to "true" or "false". This attribute is used by a "Filter Suppressed" Stream Selector as shown below.
 ````
-Here is the init script for the  Job Status Change Notification Handler that sets up the cache and the notification template
 
-<img src="/images/custom_notifications_10.png" align="center" />
-
-Here is the init script for easy copy and paste:
-````
-sdc.state['notification_template'] = 'Job Status Change for Job {} with Job ID {} at {} from {} {} to {} {}'
-sdc.state['cache'] = {}
-````
 
 Here is an example of a JSON payload getting formatted as a notification message that will be sent to the endpoints. Note also the **send_notification** is set to "true":
 
-<img src="/images/custom_notifications_11.png" align="center" />
+<img src="/images/Handle_Job_Status_Change_2.png" align="center" />
 
 ### Monitoring Suppressed Messages
-One can see the number of delivered vs suppressed notifications by viewing the "Filter Suppressed" Stream Selector.  
-In this case, of 129 Job Status Changed notifications, 14 were forwarded to Slack and 115 were suppressed:
+We can see the number of delivered vs suppressed notifications by viewing the "Filter Suppressed" Stream Selector.  
+In the example below, out of 37 Job Status Changed notifications, 2 were forwarded to Slack and 35 were suppressed:
 
-<img src="/images/custom_notifications_12.png" align="right" />
-
-One can validate the correct behavior by correlating timestamps in the notifications received over Slack with the notifications written to the suppressed notification log.
+<img src="/images/Filter_Suppressed.png" align="center" />
 
 ### Monitor the Notification Management Jobs
 If the pattern described above is implemented, the result will be two Jobs that manage how Control Hub notifications get routed to target systems.  
@@ -150,51 +153,21 @@ To ensure that any issues in these two Jobs are always known right away (and are
 
 ## Use-Case #2: Automated acknowledgement of jobs going in INACTIVE_ERROR state
 
+
 ### Problem statement:
 
  Jobs going into INACTIVE_ERROR state and missing next scheduled runs unless the error is acknowledged by an operator.
 
-### Solution overview:
-
-The example below demonstrates using subscriptions and a REST service(StreamSets pipeline) to automate acknowledgement of jobs in INACTIVE_ERROR state. For this we’ll create:
-
-    a) A subscription to trigger on job’s INACTIVE_ERROR state
-    b) REST service(deployed behind a LoadBalancer for HA) to call the Control Hub API to acknowledge the error.
-    c) [Optional] NGINX server for Loadbalancing and HA
-
-<img src="/images/inactive_error1.png" align="center" />
 
 #### 1. Create a subscription as shown below:
 
-<img src="/images/inactive_error5.png" align="center" />
-
-URI: The URI points to the REST service URL in step #2. This will be the URL of the load balancer or the SDC running the REST service pipeline.
-
 Subscription Payload:
-````
-{
-      "JOB_ID":"{{JOB_ID}}"
-}
-````
 
-#### 2. Create a REST service [pipeline](../pipelines/INACTIVE_ERROR_Job_ACK.json)
-
-<img src="/images/inactive_error2.png" align="center" />
-
-REST Service configuration example:
-
-<img src="/images/inactive_error3.png" align="center" />
-
-Control Hub API configuration example:
-
-<img src="/images/inactive_error4.png" align="center" />
 
 Control Hub URL: *https://<ControlHub-URL>/jobrunner/rest/v1/job/${record:value("/JOB_ID")}/acknowledgeError*
 
-#### 3. [Optional] If configuring NGINX load balancer, you can use a Docker command like below:
-````
-docker run --name my-nginx --network=cluster  -v /<host-path>/nginx.conf:/etc/nginx/nginx.conf:ro -d -p <custom-port>:80 nginx
-example: docker run --name my-nginx --network=cluster  -v ~/nginx/nginx.conf:/etc/nginx/nginx.conf:ro -d -p 8081:80 nginx
-````
-** Sample nginx configuration is available [here](nginx.conf)    
+## Use-Case #3: Engine Monitoring
+
+## Use-Case #4: Track Pipeline Commits
+
 
