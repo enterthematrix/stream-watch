@@ -5,20 +5,31 @@ FROM jenkins/jenkins:lts
 USER root
 RUN echo "root:root" | chpasswd
 
-# Create a symlink for python
-RUN ln -s /usr/bin/python3 /usr/bin/python
-
-# Install necessary packages
+# Install required packages
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    python3-pyenv \
     python3-dev \
     git \
     vim \
     net-tools \
     curl \
+    tail \
+    build-essential \
+    libssl-dev \
+    libreadline-dev \
+    zlib1g-dev \
     && apt-get clean
+
+# Install pyenv and set up Python
+RUN curl https://pyenv.run | bash
+ENV PATH="/root/.pyenv/bin:${PATH}"
+RUN pyenv init --path
+RUN pyenv install 3.10.4
+RUN pyenv global 3.10.4
+
+# Create a symlink for python to point to python3
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Set the user back to Jenkins
 USER jenkins
