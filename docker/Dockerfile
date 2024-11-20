@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y \
     vim \
     net-tools \
     curl \
-    tail \
     build-essential \
     libssl-dev \
     libreadline-dev \
