@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     curl \
     wget \
+    && ln -s /usr/bin/python3 /usr/bin/python \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
