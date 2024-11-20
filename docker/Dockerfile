@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     net-tools \
     curl \
+    tail \
     build-essential \
     libssl-dev \
     libreadline-dev \
@@ -29,14 +30,14 @@ RUN curl https://pyenv.run | bash
 ENV PATH="/root/.pyenv/bin:${PATH}"
 RUN pyenv init --path
 
-# Allow Jenkins user to use pyenv by setting up environment variables
-RUN echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> /etc/profile.d/pyenv.sh
-RUN echo 'eval "$(pyenv init --path)"' >> /etc/profile.d/pyenv.sh
-RUN echo 'eval "$(pyenv init -)"' >> /etc/profile.d/pyenv.sh
+# Ensure pyenv is available to the Jenkins user by updating .bashrc
+RUN echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> /home/jenkins/.bashrc
+RUN echo 'eval "$(pyenv init --path)"' >> /home/jenkins/.bashrc
+RUN echo 'eval "$(pyenv init -)"' >> /home/jenkins/.bashrc
 
 # Install a specific Python version using pyenv
-RUN pyenv install 3.10.4
-RUN pyenv global 3.10.4
+RUN su - jenkins -c "pyenv install 3.10.4"
+RUN su - jenkins -c "pyenv global 3.10.4"
 
 # Create symlink for python to point to python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
