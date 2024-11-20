@@ -1,28 +1,28 @@
-# Use Jenkins LTS as the base image
+# Use Jenkins LTS as base image
 FROM jenkins/jenkins:lts
 
-# Switch to root user to install packages
+# Set root password to "root"
 USER root
-
-# Set the root password
 RUN echo "root:root" | chpasswd
 
-# Update the package manager and install required packages
+# Create a symlink for python
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+# Install necessary packages
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    python3-dev \
+    pyenv \
     git \
     vim \
     net-tools \
-    iputils-ping \
     curl \
-    wget \
-    && ln -s /usr/bin/python3 /usr/bin/python \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    tail \
+    && apt-get clean
 
-# Verify installations
-RUN python3 --version && git --version && vim --version && netstat --version
-
-# Switch back to Jenkins user for security
+# Set the user back to Jenkins
 USER jenkins
+
+# Expose the default Jenkins port
+EXPOSE 8080
