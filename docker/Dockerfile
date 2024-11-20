@@ -29,7 +29,10 @@ RUN curl https://pyenv.run | bash
 ENV PATH="/root/.pyenv/bin:${PATH}"
 RUN pyenv init --path
 
-# Ensure pyenv is available to the Jenkins user by updating .bashrc
+# Ensure Jenkins user home directory exists
+RUN mkdir -p /home/jenkins && chown -R jenkins:jenkins /home/jenkins
+
+# Add pyenv initialization to Jenkins' .bashrc
 RUN echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> /home/jenkins/.bashrc
 RUN echo 'eval "$(pyenv init --path)"' >> /home/jenkins/.bashrc
 RUN echo 'eval "$(pyenv init -)"' >> /home/jenkins/.bashrc
