@@ -4,6 +4,9 @@ FROM jenkins/jenkins:lts
 # Switch to root user to install packages
 USER root
 
+# Set the root password
+RUN echo "root:root" | chpasswd
+
 # Update the package manager and install required packages
 RUN apt-get update && apt-get install -y \
     python3 \
