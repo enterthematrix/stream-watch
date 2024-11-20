@@ -30,10 +30,13 @@ RUN curl https://pyenv.run | bash
 # Ensure Jenkins user home directory exists
 RUN mkdir -p /home/jenkins && chown -R jenkins:jenkins /home/jenkins
 
-# Add pyenv initialization to Jenkins' .bashrc
+# Add pyenv initialization to Jenkins' .bashrc and .profile to make sure it's sourced
 RUN echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> /home/jenkins/.bashrc
 RUN echo 'eval "$(pyenv init --path)"' >> /home/jenkins/.bashrc
 RUN echo 'eval "$(pyenv init -)"' >> /home/jenkins/.bashrc
+RUN echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> /home/jenkins/.profile
+RUN echo 'eval "$(pyenv init --path)"' >> /home/jenkins/.profile
+RUN echo 'eval "$(pyenv init -)"' >> /home/jenkins/.profile
 
 # Install pyenv properly for Jenkins user using bash -l -c
 RUN su - jenkins -c 'bash -l -c "pyenv install 3.10.4"'
