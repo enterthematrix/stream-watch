@@ -12,13 +12,12 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    python3-pyenv \
     python3-dev \
-    pyenv \
     git \
     vim \
     net-tools \
     curl \
-    tail \
     && apt-get clean
 
 # Set the user back to Jenkins
