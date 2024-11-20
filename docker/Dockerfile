@@ -26,7 +26,6 @@ RUN apt-get update && apt-get install -y \
 
 # Install pyenv and set up Python for Jenkins user
 RUN curl https://pyenv.run | bash
-ENV PATH="/root/.pyenv/bin:${PATH}"
 
 # Ensure Jenkins user home directory exists
 RUN mkdir -p /home/jenkins && chown -R jenkins:jenkins /home/jenkins
@@ -36,11 +35,9 @@ RUN echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> /home/jenkins/.bashrc
 RUN echo 'eval "$(pyenv init --path)"' >> /home/jenkins/.bashrc
 RUN echo 'eval "$(pyenv init -)"' >> /home/jenkins/.bashrc
 
-# Install pyenv properly for Jenkins user in non-interactive shell
-RUN su - jenkins -c 'export PATH="$HOME/.pyenv/bin:$PATH" && eval "$(pyenv init --path)" && eval "$(pyenv init -)" && pyenv install 3.10.4'
-
-# Set Python version for Jenkins user
-RUN su - jenkins -c 'export PATH="$HOME/.pyenv/bin:$PATH" && eval "$(pyenv init --path)" && eval "$(pyenv init -)" && pyenv global 3.10.4'
+# Install pyenv properly for Jenkins user using bash -l -c
+RUN su - jenkins -c 'bash -l -c "pyenv install 3.10.4"'
+RUN su - jenkins -c 'bash -l -c "pyenv global 3.10.4"'
 
 # Create symlink for python to point to python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
