@@ -11,7 +11,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     python3 \
     python3-pip \
-    git \
+    vim \
+    net-tools \
+    iputils-ping \
+    procps \
+    lsof \
     && rm -rf /var/lib/apt/lists/*
 
 # Add Jenkins user
@@ -25,14 +29,14 @@ RUN curl -fsSL https://get.jenkins.io/war-stable/$JENKINS_VERSION/jenkins.war -o
 # Expose ports for Jenkins
 EXPOSE 8080 50000
 
-# Switch to Jenkins user
-USER jenkins
-
 # Set Python as the default python command
-RUN sudo ln -s /usr/bin/python3 /usr/bin/python
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Set up Jenkins to run on start
+USER jenkins
+
+# Default command to start Jenkins
 ENTRYPOINT ["java", "-jar", "/usr/share/jenkins/jenkins.war"]
 
-# Default command
+# Default arguments for Jenkins
 CMD ["--httpPort=8080"]
