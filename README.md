@@ -4,16 +4,14 @@ Using StreamSets Subscriptions & Pipelines for monitoring
 
 ## Use-Case #1: Job Monitoring
 
-This is a more comprehensive example covering a design pattern developed by [Mark Brooks](https://github.com/onefoursix) for customizing the management of subscriptions-based notifications
-
 ### Problem statement:
 
 Consider a running pipeline that is successfully writing to Kafka and then, for some reason, the Kafka cluster becomes unreachable.  
 Assume the pipeline is configured to retry infinitely and that a Control Hub Subscription is configured to push outbound webhooks to a Slack Channel for the [Job Status Change Event](https://docs.streamsets.com/portal/#controlhub/latest/help/controlhub/UserGuide/Subscriptions/Events.html#concept_gjm_d5t_mfb).
 As the retry logic of the pipeline executes, one might receive a frequent and steady stream of notifications, like this:
 
-<img src="/images/custom_notifications_1.png" align="center" />
-<img src="/images/kafka_error.png" align="center" />
+<img src="/images/KAFKA_68_1.png" align="center" />
+<img src="/images/KAFKA_68_2.png" align="center" />
 
 Once the original notification with the KAFKA_68 error code has been received, operations may wish to suppress the steady stream of similar notifications for a period of time, for example for every 15 or 30 minutes, until the issue is resolved, rather than getting multiple notifications every five minutes.
 
@@ -21,9 +19,8 @@ Once the original notification with the KAFKA_68 error code has been received, o
 #### Using StreamSets microservice pipeline and Kafka to manage notifications
 
 One way to allow operations to configure custom Control Hub notification handling is to use a pair of SDC pipelines as depicted below:
+<img src="/images/StreamSets_Notification_Processor_1.png" align="center" />
 
-
-<img src="/images/custom_notifications_2.png" align="center" />
 
 
 The 'REST Service' to Kafka pipeline instances are SDC Microservice Pipelines (behind a Load Balancer for HA) configured as the target for Control Hub's outbound Webhook notifications.  
@@ -72,7 +69,7 @@ The Payload for the outbound Webhook is:
 Note the top level elements **notification_type** and **notification_payload** allow multiple different event subscriptions to share the same Kafka topic, as each message will have identifying information and can be sorted out using a Stream Selector in the second pipeline.
 
 ### Pipeline 1: Control Hub Notifications to Kafka
-The first pipeline is an [SDC Microservice pipeline](https://docs.streamsets.com/portal/#datacollector/latest/help/datacollector/UserGuide/Microservice/Microservice_Title.html#concept_gzw_tdm_p2b) that looks like this:
+The first pipeline is an [SDC Microservice pipeline](https://docs.streamsets.com/portal/platform-datacollector/latest/datacollector/UserGuide/Microservice/Microservice_Title.html#concept_gzw_tdm_p2b) that looks like this:
 
 <img src="/images/StreamSets_Monitoring_REST_Service_1.png" align="center" />
 
@@ -82,7 +79,7 @@ Here is a sample notification received by the REST Service Origin:
 
 <img src="/images/StreamSets_Monitoring_REST_Service_2.png" align="center" />
 
-This pipeline should be deployed using a Job with [at least 2 instances](https://docs.streamsets.com/portal/#controlhub/latest/help/controlhub/UserGuide/Jobs/Jobs-PipelineInstances.html#concept_abz_mkl_rz), behind a Load Balancer, for HA purposes.
+This pipeline should be deployed using a Job with [at least 2 instances](https://docs.streamsets.com/portal/platform-controlhub/controlhub/UserGuide/Jobs/Jobs.html#concept_omz_yn1_4w), behind a Load Balancer, for HA purposes.
 
 ### Pipeline 2: Control Hub Notification Handler
 The second pipeline could look like this
@@ -93,7 +90,7 @@ This pipeline consumes subscription messages from the Kafka topic and routes the
 For example, Pipeline Commit events could be forwarded unchanged to Jenkins to kick-off CI/CD processes, and Job Status Change events could be filtered to suppress duplicate messages within a 15 minute window and then forwarded to both Slack/Teams etc.  
 Suppressed Job Status Changed events can be written to an Audit Log.
 
-#### 3. [Optional] To configure NGINX/HAProxy load balancer, we can use the Docker commands like below:
+#### 3. [Recommended] To configure NGINX/HAProxy load balancer, we can use the Docker commands like below:
 ````
 NGINX:
 docker run --name <name> --network=<docker-cluster>  -v /<host-path>/nginx.conf:/etc/nginx/nginx.conf:ro -d -p <custom-port>:80 nginx
@@ -153,21 +150,79 @@ To ensure that any issues in these two Jobs are always known right away (and are
 
 ## Use-Case #2: Automated acknowledgement of jobs going in INACTIVE_ERROR state
 
+### Problem statement: 
+If a job encounters un-recoverable problems, the job status will change to INACTIVE_ERROR.  This state must be explicitly *acknowledged to perform any further actions on the job.
+Jobs going into INACTIVE_ERROR state will miss the next scheduled runs unless the error is acknowledged by an operator.
 
-### Problem statement:
+** "Require Job Error Acknowledgement" is set to TRUE by default
 
- Jobs going into INACTIVE_ERROR state and missing next scheduled runs unless the error is acknowledged by an operator.
-
+We can call ControlHub REST API to acknowledge the INACTIVE_ERROR state, and it can be automated suing a StreamSets pipeline
 
 #### 1. Create a subscription as shown below:
 
-Subscription Payload:
+<img src="/images/inactive_error_trigger.png" align="center" />
+Subscription payload and other configurations will be similar to use-case #1
 
-
-Control Hub URL: *https://<ControlHub-URL>/jobrunner/rest/v1/job/${record:value("/JOB_ID")}/acknowledgeError*
+Control Hub REST URL: *https://<ControlHub-URL>/jobrunner/rest/v1/job/${record:value("/JOB_ID")}/acknowledgeError*
+<img src="/images/inactive_error_condition.png" align="center" />
+#### 2. The pipeline:
+<img src="/images/inactive_error_pipeline.png" align="center" />
 
 ## Use-Case #3: Engine Monitoring
 
-## Use-Case #4: Track Pipeline Commits
+### Problem statement: 
+The operators wants to get notified as soon as any engines are marked as non-responsive 
+
+#### 1. Create a subscription as shown below:
+
+<img src="/images/engine_not_responding_trigger.png" align="center" />
+
+Subscription Payload: [*other configurations will be similar]
+
+```
+{
+   "notification_type":"ENGINE_NOT_RESPONDING",
+   "notification_payload":{
+      "SDC_ID":"{{SDC_ID}}",
+      "HTTP_URL":"{{HTTP_URL}}",
+      "LAST_REPORTED_TIME":"{{LAST_REPORTED_TIME}}"
+   }
+}
+```
+
+<img src="/images/engine_not_responding_condition.png" align="center" />
+
+#### 2. The pipeline:
+<img src="/images/engine_not_responding_pipeline.png" align="center" />
+
+## Use-Case #4: Trigger a CI/CD workflow
+
+### Problem statement: 
+The developer/operators wants to trigger a Jenkins job as soon as new changes are committed to pipelines 
+
+#### 1. Create a subscription as shown below:
+
+<img src="/images/pipeline_commit_trigger.png" align="center" />
+* pipeline_id is specified for demo purposes
+
+Subscription Payload: [*other configurations will be similar]
+
+```
+{
+   "notification_type":"PIPELINE_COMMITTED",
+   "notification_payload":{
+      "PIPELINE_ID":"{{PIPELINE_ID}}",
+      "PIPELINE_NAME":"{{PIPELINE_NAME}}",
+      "PIPELINE_VERSION":"{{PIPELINE_VERSION}}",
+      "PIPELINE_COMMITTER":"{{PIPELINE_COMMITTER}}",
+      "PIPELINE_COMMIT_TIME":"{{PIPELINE_COMMIT_TIME}}"
+   }
+}
+```
+
+<img src="/images/pipeline_commit_condition.png" align="center" />
+
+#### 2. The pipeline:
+<img src="/images/pipeline_commit_pipeline.png" align="center" />
 
 
