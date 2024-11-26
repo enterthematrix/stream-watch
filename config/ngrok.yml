@@ -1,0 +1,9 @@
+version: 2
+authtoken: <AUTH-TOKEN>
+tunnels:
+  first:
+    proto: http
+    addr: 18890
+  second:
+    proto: http
+    addr: 8080
